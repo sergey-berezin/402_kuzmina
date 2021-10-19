@@ -14,8 +14,8 @@ namespace Models
     public class RecognitionModel
     {
         public string DirectoryPath { get; set; }
+        public CancellationTokenSource CTS { get; set; }
 
-        public static readonly ConcurrentQueue<RecognitionResponse> responseQueue = new ConcurrentQueue<RecognitionResponse>();
         static readonly ConcurrentQueue<Bitmap> bitmapQueue = new ConcurrentQueue<Bitmap>();
 
         private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionModel).Assembly.Location);
@@ -28,12 +28,13 @@ namespace Models
             "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
             "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        public RecognitionModel(string directory)
+        public RecognitionModel(string directoryPath, CancellationTokenSource cancellationTokenSource)
         {
-            DirectoryPath = directory;
+            DirectoryPath = directoryPath;
+            CTS = cancellationTokenSource;
         }
 
-        public void Recognize()
+        public void Recognize(ConcurrentQueue<RecognitionResponse> responseQueue)
         {
             MLContext mlContext = new MLContext();
             var pipeline = mlContext.Transforms.ResizeImages(inputColumnName: "bitmap", outputColumnName: "input_1:0", imageWidth: 416, imageHeight: 416, resizing: ResizingKind.IsoPad)
@@ -65,23 +66,6 @@ namespace Models
             var locker = new Object();
             int currCount = 0;
             var tasks = new List<Task>();
-            var cts = new CancellationTokenSource();
-
-            tasks.Add(Task.Factory.StartNew(() =>
-            {
-                if (!cts.Token.IsCancellationRequested)
-                {
-                    for (int i = 0; i < imgCount; i++)
-                    {
-                        while (responseQueue.Count == 0) { }
-                        responseQueue.TryDequeue(out var res);
-                        Console.Write($"\n{res.Percent}% images are processed. ");
-                        foreach (var obj in res.FoundObjects)
-                            Console.Write($"{obj.Key}: {obj.Value}, ");
-                        Console.WriteLine();
-                    }
-                }
-            }, cts.Token));
 
             var sw = new Stopwatch();
             sw.Start();
@@ -90,12 +74,12 @@ namespace Models
             {
                 tasks.Add(Task.Factory.StartNew( () =>
                 {
-                    if (!cts.Token.IsCancellationRequested)
+                    if (!CTS.Token.IsCancellationRequested)
                     {
                         var bitmap = new Bitmap(Image.FromFile(imagePath));
                         bitmapQueue.Enqueue(bitmap);
                     }
-                }, cts.Token));
+                }, CTS.Token));
             }
             for (int j = 0; j < imgCount; j++)
             {
@@ -107,7 +91,7 @@ namespace Models
                 tasks.Add(Task.Factory.StartNew( () =>
                 {
                     RecognitionResponse response = new RecognitionResponse();
-                    if (!cts.Token.IsCancellationRequested)
+                    if (!CTS.Token.IsCancellationRequested)
                     {
                         var results = predict.GetResults(classesNames, 0.3f, 0.7f);
                         foreach (var res in results)
@@ -129,7 +113,7 @@ namespace Models
                         responseQueue.Enqueue(response);
                     }
                     return response;
-                }, cts.Token));
+                }, CTS.Token));
             }
             Task.WaitAll(tasks.ToArray());
             sw.Stop();

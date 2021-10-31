@@ -101,10 +101,10 @@ namespace Models
                                 foundObjects.Add(res.Label, ++count);
                             else
                                 foundObjects[res.Label]++;
-                            response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]});
+                            response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]}, res.Label);
                         }
                         response.FoundObjects = foundObjects;
-                        
+                        response.Image = bitmap;
                         lock (locker)
                         {
                             currCount++;

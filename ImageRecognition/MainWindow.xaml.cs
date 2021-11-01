@@ -3,15 +3,12 @@ using System.Windows.Forms;
 using System.IO;
 using System.Drawing;
 using System.Windows.Media.Imaging;
-using System.Collections.Generic;
 using System;
-using System.Windows.Documents;
 using System.Threading.Tasks;
 using System.Threading;
 using Models;
 using System.Collections.Concurrent;
 using System.Drawing.Imaging;
-using System.Linq;
 
 namespace ImageRecognition
 {
@@ -21,47 +18,35 @@ namespace ImageRecognition
     public partial class MainWindow : Window
     {
         public string SelectedPath { get; set; }
+        public CancellationTokenSource CTS { get; set; }
         public MainWindow()
         {
             InitializeComponent();
+            StartButton.IsEnabled = false;
+            CancelButton.IsEnabled = false;
         }
         private void ChoosingFolder(object sender, RoutedEventArgs e)
         {
             var fbd = new FolderBrowserDialog();
             DialogResult result = fbd.ShowDialog();
-            //List<string> files = new List<string>();
             if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
             {
                 SelectedPath = fbd.SelectedPath;
-                //files = new List<string>(Directory.GetFiles(SelectedPath));
             }
-
-            //foreach (string file in files)
-            //{ 
-            //    System.Windows.Controls.Image myImage = new System.Windows.Controls.Image();
-
-            //    BitmapImage myBitmapImage = new BitmapImage();
-            //    myBitmapImage.BeginInit();
-            //    myBitmapImage.UriSource = new Uri(file);
-            //    myBitmapImage.DecodePixelWidth = 200;
-            //    myBitmapImage.EndInit();
-
-            //    myImage.Source = myBitmapImage;
-            //    myImage.Width = 200;
-
-            //    myPanel.Children.Add(myImage);
-            //}
+            StartButton.IsEnabled = true;
         }
         private async void BeginRecognizing(object sender, RoutedEventArgs e)
         {
-            CancellationTokenSource cts = new CancellationTokenSource();
-            RecognitionModel model = new RecognitionModel(SelectedPath, cts);
+            CTS = new CancellationTokenSource();
+            RecognitionModel model = new RecognitionModel(SelectedPath, CTS);
             ConcurrentQueue<RecognitionResponse> responseQueue = new ConcurrentQueue<RecognitionResponse>();
 
             await Task.Run(() =>
             {
                 model.Recognize(responseQueue);
             });
+
+            CancelButton.IsEnabled = true;
 
             for (int i = 0; i < Directory.GetFiles(SelectedPath).Length; i++)
             {
@@ -93,16 +78,18 @@ namespace ImageRecognition
             {
                 bitmap.Save(memory, ImageFormat.Png);
                 memory.Position = 0;
-
                 var bitmapImage = new BitmapImage();
                 bitmapImage.BeginInit();
                 bitmapImage.StreamSource = memory;
                 bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
                 bitmapImage.EndInit();
                 bitmapImage.Freeze();
-
                 return bitmapImage;
             }
+        }
+        private void CancelRecognition(object sender, RoutedEventArgs e)
+        {
+            CTS.Cancel();
         }
     }
 }

@@ -6,19 +6,16 @@
         xmlns:local="clr-namespace:ImageRecognition"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
-    <AdornerDecorator>
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="30"/>
-                <RowDefinition/>
-            </Grid.RowDefinitions>
-            <Button Content="Choose Folder" Click="ChoosingFolder" Margin="5,5,700,5"/>
-            <Button Content="Start Recognition" Click="BeginRecognizing" Margin="110,5,580,5"/>
-            <ListBox Grid.Row="1" Name="imagesBox">
-                
-            </ListBox>
-         </Grid>
-
-        
-    </AdornerDecorator>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+        <Button Content="Choose Folder" Click="ChoosingFolder" Margin="5,5,700,5"/>
+        <Button Name="StartButton" Content="Start Recognition" Click="BeginRecognizing" Margin="110,5,580,5"/>
+        <Button Name="CancelButton" Content="Cancel" Click="CancelRecognition" Margin="700,5,5,5"/>
+        <ListBox Grid.Row="1" Name="imagesBox">
+            
+        </ListBox>
+    </Grid>
 </Window>

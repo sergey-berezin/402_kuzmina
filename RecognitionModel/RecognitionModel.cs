@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
@@ -67,9 +68,6 @@ namespace Models
             int currCount = 0;
             var tasks = new List<Task>();
 
-            var sw = new Stopwatch();
-            sw.Start();
-
             foreach (string imagePath in Directory.GetFiles(DirectoryPath))
             {
                 tasks.Add(Task.Factory.StartNew( () =>
@@ -115,9 +113,17 @@ namespace Models
                     return response;
                 }, CTS.Token));
             }
-            Task.WaitAll(tasks.ToArray());
-            sw.Stop();
-            Console.WriteLine($"\nDone in {sw.ElapsedMilliseconds}ms.");
+            try
+            {
+                Task.WaitAll(tasks.ToArray());
+                responseQueue.Enqueue(null);
+            }
+            catch (AggregateException e)
+            {
+                if (e.InnerExceptions.All(ex => ex.GetType() == typeof(TaskCanceledException)))
+                    if (e.InnerExceptions.All(ex => (ex as TaskCanceledException).CancellationToken == CTS.Token))
+                        throw e.InnerExceptions[0];
+            }
         }
     }
 }

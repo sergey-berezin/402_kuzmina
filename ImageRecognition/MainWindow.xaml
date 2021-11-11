@@ -11,9 +11,18 @@
             <RowDefinition Height="30"/>
             <RowDefinition/>
         </Grid.RowDefinitions>
-        <Button Content="Choose Folder" Click="ChoosingFolder" Margin="5,5,700,5"/>
-        <Button Name="StartButton" Content="Start Recognition" Click="BeginRecognizing" Margin="110,5,580,5"/>
-        <Button Name="CancelButton" Content="Cancel" Click="CancelRecognition" Margin="700,5,5,5"/>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <Button Content="Choose Folder" Click="ChoosingFolder" Grid.Column="0" Margin="5,5,5,5"/>
+            <Button Name="StartButton" Content="Start Recognition" Click="BeginRecognizing" Grid.Column="1" Margin="5,5,5,5"/>
+            <Button Name="CancelButton" Content="Cancel" Click="CancelRecognition" Grid.Column="3" Margin="5,5,5,5"/>
+        </Grid>
+        
         <ListBox Grid.Row="1" Name="imagesBox">
             
         </ListBox>

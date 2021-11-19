@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
@@ -66,10 +67,7 @@ namespace Models
             var locker = new Object();
             int currCount = 0;
             var tasks = new List<Task>();
-
-            var sw = new Stopwatch();
-            sw.Start();
-
+          
             foreach (string imagePath in Directory.GetFiles(DirectoryPath))
             {
                 tasks.Add(Task.Factory.StartNew( () =>
@@ -101,10 +99,11 @@ namespace Models
                                 foundObjects.Add(res.Label, ++count);
                             else
                                 foundObjects[res.Label]++;
-                            response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]});
+
+                            response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]}, res.Label);
                         }
                         response.FoundObjects = foundObjects;
-                        
+                        response.Image = bitmap;
                         lock (locker)
                         {
                             currCount++;
@@ -115,9 +114,17 @@ namespace Models
                     return response;
                 }, CTS.Token));
             }
-            Task.WaitAll(tasks.ToArray());
-            sw.Stop();
-            Console.WriteLine($"\nDone in {sw.ElapsedMilliseconds}ms.");
+            try
+            {
+                Task.WaitAll(tasks.ToArray());
+                responseQueue.Enqueue(null);
+            }
+            catch (AggregateException e)
+            {
+                if (e.InnerExceptions.All(ex => ex.GetType() == typeof(TaskCanceledException)))
+                    if (e.InnerExceptions.All(ex => (ex as TaskCanceledException).CancellationToken == CTS.Token))
+                        throw e.InnerExceptions[0];
+            }
         }
     }
 }

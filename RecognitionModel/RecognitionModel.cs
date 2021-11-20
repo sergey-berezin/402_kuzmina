@@ -67,7 +67,7 @@ namespace Models
             var locker = new Object();
             int currCount = 0;
             var tasks = new List<Task>();
-
+          
             foreach (string imagePath in Directory.GetFiles(DirectoryPath))
             {
                 tasks.Add(Task.Factory.StartNew( () =>
@@ -99,6 +99,7 @@ namespace Models
                                 foundObjects.Add(res.Label, ++count);
                             else
                                 foundObjects[res.Label]++;
+
                             response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]}, res.Label);
                         }
                         response.FoundObjects = foundObjects;

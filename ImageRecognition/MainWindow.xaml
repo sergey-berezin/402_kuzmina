@@ -25,6 +25,5 @@
         </Grid>
 
         <ListBox Grid.Row="1" Grid.Column="0" Name="imagesBox" />
-
     </Grid>
 </Window>

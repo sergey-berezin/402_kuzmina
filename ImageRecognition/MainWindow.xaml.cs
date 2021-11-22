@@ -21,7 +21,7 @@ namespace ImageRecognition
     {
         public string SelectedPath { get; set; }
         public CancellationTokenSource CTS { get; set; }
-        public DbRepository Db = new DbRepository(dbPath);
+        DbRepository Db = new DbRepository(dbPath);
         private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionModel).Assembly.Location);
         private static readonly string dbPath = Path.Combine(_dataRoot.Directory.FullName, @"..\..\..\..\ImageRecognition\recognitions.db");
         public MainWindow()
@@ -117,7 +117,8 @@ namespace ImageRecognition
                         dbImage.Image = byteImg;
                         dbImage.Hash = new BigInteger(byteImg).GetHashCode();
                         dbImage.Objects = new List<RecognizedObject>(dbObjects.ToArray());
-                        if (Db.RecognizedImages.All(r => r.Hash != dbImage.Hash))
+                        if (Db.RecognizedImages.All(r => r.Hash != dbImage.Hash) || 
+                            Db.RecognizedImages.Where(r => r.Hash == dbImage.Hash).All(r => r.Image != dbImage.Image))
                         {
                             Db.RecognizedImages.Add(dbImage);
                             Db.SaveChanges();

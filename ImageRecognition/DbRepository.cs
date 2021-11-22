@@ -1,6 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 
 namespace Models
 {
@@ -16,25 +15,17 @@ namespace Models
     public class RecognizedImage
     {
         public int Id { get; set; }
-        [ConcurrencyCheck]
         public byte[] Image { get; set; }
-        [ConcurrencyCheck]
         virtual public ICollection<RecognizedObject> Objects { get; set; }
-        [ConcurrencyCheck]
         public int Hash { get; set; }
     }
     public class RecognizedObject
     {
         public int Id { get; set; }
-        [ConcurrencyCheck]
         public float X1 { get; set; }
-        [ConcurrencyCheck]
         public float Y1 { get; set; }
-        [ConcurrencyCheck]
         public float X2 { get; set; }
-        [ConcurrencyCheck]
         public float Y2 { get; set; }
-        [ConcurrencyCheck]
         public string Class { get; set; }
         public RecognizedObject(float x1, float y1, float x2, float y2, string label)
         {

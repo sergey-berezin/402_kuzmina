@@ -7,10 +7,11 @@ using System;
 using System.Threading.Tasks;
 using System.Threading;
 using Models;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
+using System.Net.Http;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace ImageRecognition
 {
@@ -21,20 +22,22 @@ namespace ImageRecognition
     {
         public string SelectedPath { get; set; }
         public CancellationTokenSource CTS { get; set; }
-        DbRepository Db = new DbRepository(dbPath);
-        private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionModel).Assembly.Location);
-        private static readonly string dbPath = Path.Combine(_dataRoot.Directory.FullName, @"..\..\..\..\ImageRecognition\recognitions.db");
         public MainWindow()
         {
             InitializeComponent();
             StartButton.IsEnabled = false;
             CancelButton.IsEnabled = false;
             DeleteItemsButton.IsEnabled = false;
-            UpdateListBox();
         }
-        public void UpdateListBox()
+        private async void UpdateListBox(object sender, RoutedEventArgs e)
         {
-            foreach (var r in Db.RecognizedImages)
+            imagesBox.Items.Clear();
+
+            HttpClient client = new HttpClient();
+            var response = await client.GetAsync($"https://localhost:44374/image/info");
+            string json = await response.Content.ReadAsStringAsync();
+            List<RecognizedImage> recognizedImages = JsonConvert.DeserializeObject<List<RecognizedImage>>(json);
+            foreach (var r in recognizedImages)
             {
                 AddImage(imagesBox, r);
             }
@@ -80,65 +83,62 @@ namespace ImageRecognition
         }
         private async void BeginRecognizing(object sender, RoutedEventArgs e)
         {
-            imagesBox.Items.Clear();
             DeleteItemsButton.IsEnabled = false;
             CTS = new CancellationTokenSource();
-            RecognitionModel model = new RecognitionModel(SelectedPath, CTS);
-            ConcurrentQueue<RecognitionResponse> responseQueue = new ConcurrentQueue<RecognitionResponse>();
-
-            Task t1 = Task.Factory.StartNew(() =>
-            {
-                try
-                {
-                    model.Recognize(responseQueue);
-                }
-                catch (TaskCanceledException)
-                {
-                    System.Windows.MessageBox.Show("Recognition was cancelled.");
-                }
-            });
+            RecognitionOne model = new RecognitionOne();
 
             CancelButton.IsEnabled = true;
-            StartButton.IsEnabled = false;
 
-            Task t2 = Task.Factory.StartNew(() =>
+            await Task.Factory.StartNew(() =>
             {
-                while (t1.Status == TaskStatus.Running)
-                {
-                    while (responseQueue.TryDequeue(out var res) && res != null)
+                var tasks = new List<Task>();
+                foreach (string imagePath in Directory.GetFiles(SelectedPath))
+                    tasks.Add(Task.Factory.StartNew(async () =>
                     {
-                        ConcurrentQueue<RecognizedObject> dbObjects = new ConcurrentQueue<RecognizedObject>();
-                        foreach (var obj in res.Corners)
-                            dbObjects.Enqueue(new RecognizedObject(obj.Key[0], obj.Key[1], obj.Key[2], obj.Key[3], obj.Value));
-
-                        RecognizedImage dbImage = new RecognizedImage();
-                        ImageConverter converter = new ImageConverter();
-                        byte[] byteImg = (byte[])converter.ConvertTo(res.Image, typeof(byte[]));
-                        dbImage.Image = byteImg;
-                        dbImage.Hash = new BigInteger(byteImg).GetHashCode();
-                        dbImage.Objects = new List<RecognizedObject>(dbObjects.ToArray());
-                        if (Db.RecognizedImages.All(r => r.Hash != dbImage.Hash) || 
-                            Db.RecognizedImages.Where(r => r.Hash == dbImage.Hash).All(r => r.Image != dbImage.Image))
+                        if (CTS.Token.IsCancellationRequested) return;
+                        try
                         {
-                            Db.RecognizedImages.Add(dbImage);
-                            Db.SaveChanges();
+                            HttpClient client = new HttpClient();
+                            var bitmap = new Bitmap(Image.FromFile(imagePath));
+                            ImageConverter converter = new ImageConverter();
+                            var bytes = (byte[])converter.ConvertTo(bitmap, typeof(byte[]));
+                            var data = new StringContent(JsonConvert.SerializeObject(bytes), Encoding.Default, "application/json");
+
+                            var response = await client.PostAsync($"https://localhost:44374/image/recognize", data);
+                            if (response.IsSuccessStatusCode == false)
+                                System.Windows.MessageBox.Show($"ERROR from server:\n{response.ReasonPhrase}");
+                            string json = await response.Content.ReadAsStringAsync();
+                            RecognitionResponse res = JsonConvert.DeserializeObject<RecognitionResponse>(json);
                         }
-                    }
+                        catch (HttpRequestException)
+                        {
+                            System.Windows.MessageBox.Show("Service is unavailable");
+                        }
+
+                    }, CTS.Token));
+                try
+                {
+                    Task.WaitAll(tasks.ToArray());
+                }
+                catch (AggregateException e)
+                {
+                    if (e.InnerExceptions.All(ex => ex.GetType() == typeof(TaskCanceledException)))
+                        if (e.InnerExceptions.All(ex => (ex as TaskCanceledException).CancellationToken == CTS.Token))
+                            System.Windows.MessageBox.Show("Recognition was cancelled.");
                 }
             });
-            await Task.WhenAll(t1, t2);
+            
+            StartButton.IsEnabled = false;
             CancelButton.IsEnabled = false;
-            UpdateListBox();
         }
         private void CancelRecognition(object sender, RoutedEventArgs e)
         {
             CTS.Cancel();
         }
-        private void DeleteItems(object sender, RoutedEventArgs e)
+        private async void DeleteItems(object sender, RoutedEventArgs e)
         {
-            Db.RecognizedImages.RemoveRange(Db.RecognizedImages);
-            Db.RecognizedObjects.RemoveRange(Db.RecognizedObjects);
-            Db.SaveChanges();
+            HttpClient client = new HttpClient();
+            await client.DeleteAsync($"https://localhost:44374/image/delete");
             imagesBox.Items.Clear();
             DeleteItemsButton.IsEnabled = false;
         }

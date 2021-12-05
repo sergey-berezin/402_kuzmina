@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Models
 {
@@ -7,10 +8,10 @@ namespace Models
     {
         public DbSet<RecognizedImage> RecognizedImages { get; set; }
         public DbSet<RecognizedObject> RecognizedObjects { get; set; }
-        public string DbPath { get; set; }
-        public DbRepository(string path = "recognitions.db") => DbPath = path;
+        private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionOne).Assembly.Location);
+        private static readonly string dbPath = Path.Combine(_dataRoot.Directory.FullName, @"..\..\..\..\ImageRecognition\recognitions.db");
         protected override void OnConfiguring(DbContextOptionsBuilder options) 
-            => options.UseLazyLoadingProxies().UseSqlite($"Data Source={DbPath}");
+            => options.UseLazyLoadingProxies().UseSqlite($"Data Source={dbPath}");
     }
     public class RecognizedImage
     {

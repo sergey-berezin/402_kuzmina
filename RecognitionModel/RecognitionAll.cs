@@ -12,14 +12,14 @@ using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
 
 namespace Models
 {
-    public class RecognitionModel
+    public class RecognitionAll
     {
         public string DirectoryPath { get; set; }
         public CancellationTokenSource CTS { get; set; }
 
         static readonly ConcurrentQueue<Bitmap> bitmapQueue = new ConcurrentQueue<Bitmap>();
 
-        private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionModel).Assembly.Location);
+        private static readonly FileInfo _dataRoot = new FileInfo(typeof(RecognitionAll).Assembly.Location);
         private static readonly string modelPath = Path.Combine(_dataRoot.Directory.FullName, @"..\..\..\..\RecognitionModel\yolov4.onnx");
         private static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
             "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear",
@@ -29,7 +29,7 @@ namespace Models
             "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
             "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        public RecognitionModel(string directoryPath, CancellationTokenSource cancellationTokenSource)
+        public RecognitionAll(string directoryPath, CancellationTokenSource cancellationTokenSource)
         {
             DirectoryPath = directoryPath;
             CTS = cancellationTokenSource;
@@ -100,10 +100,11 @@ namespace Models
                             else
                                 foundObjects[res.Label]++;
 
-                            response.Corners.Add(new List<float> { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]}, res.Label);
+                            response.Objects.Add(new RecognitionObject(res.Label, new float[] { res.BBox[0], res.BBox[1], res.BBox[2], res.BBox[3]}));
                         }
                         response.FoundObjects = foundObjects;
-                        response.Image = bitmap;
+                        ImageConverter converter = new ImageConverter();
+                        response.Image = (byte[])converter.ConvertTo(bitmap, typeof(byte[]));
                         lock (locker)
                         {
                             currCount++;

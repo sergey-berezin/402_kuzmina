@@ -9,12 +9,12 @@ namespace Models
     {
         public Dictionary<string, int> FoundObjects { get; set; }
         public int Percent { get; set; }
-        public Dictionary<List<float>, string> Corners { get; set; }
-        public Bitmap Image { get; set; }
+        public List<RecognitionObject> Objects { get; set; }
+        public byte[] Image { get; set; }
         public RecognitionResponse()
         {
             FoundObjects = new Dictionary<string, int>();
-            Corners = new Dictionary<List<float>, string>();
+            Objects = new List<RecognitionObject>();
         }
     }
 }

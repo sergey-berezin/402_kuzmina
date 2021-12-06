@@ -33,16 +33,28 @@ namespace ImageRecognition
         {
             imagesBox.Items.Clear();
 
-            HttpClient client = new HttpClient();
-            var response = await client.GetAsync($"https://localhost:44374/image/info");
-            string json = await response.Content.ReadAsStringAsync();
-            List<RecognizedImage> recognizedImages = JsonConvert.DeserializeObject<List<RecognizedImage>>(json);
-            foreach (var r in recognizedImages)
+            try
             {
-                AddImage(imagesBox, r);
+                HttpClient client = new HttpClient();
+                var response = await client.GetAsync($"https://localhost:44374/image/info");
+                if (!response.IsSuccessStatusCode)
+                    System.Windows.MessageBox.Show($"ERROR from server:\n{response.ReasonPhrase}");
+                else
+                {
+                    string json = await response.Content.ReadAsStringAsync();
+                    List<RecognizedImage> recognizedImages = JsonConvert.DeserializeObject<List<RecognizedImage>>(json);
+                    foreach (var r in recognizedImages)
+                    {
+                        AddImage(imagesBox, r);
+                    }
+                }
+                if (imagesBox.Items.Count > 0)
+                    DeleteItemsButton.IsEnabled = true;
             }
-            if (imagesBox.Items.Count > 0)
-                DeleteItemsButton.IsEnabled = true;
+            catch (HttpRequestException)
+            {
+                System.Windows.MessageBox.Show("Service is unavailable");
+            }
         }
         private void AddImage(System.Windows.Controls.ListBox listBox, RecognizedImage recognized)
         {
@@ -105,10 +117,13 @@ namespace ImageRecognition
                             var data = new StringContent(JsonConvert.SerializeObject(bytes), Encoding.Default, "application/json");
 
                             var response = await client.PostAsync($"https://localhost:44374/image/recognize", data);
-                            if (response.IsSuccessStatusCode == false)
+                            if (!response.IsSuccessStatusCode)
                                 System.Windows.MessageBox.Show($"ERROR from server:\n{response.ReasonPhrase}");
-                            string json = await response.Content.ReadAsStringAsync();
-                            RecognitionResponse res = JsonConvert.DeserializeObject<RecognitionResponse>(json);
+                            else
+                            {
+                                string json = await response.Content.ReadAsStringAsync();
+                                RecognitionResponse res = JsonConvert.DeserializeObject<RecognitionResponse>(json);
+                            }
                         }
                         catch (HttpRequestException)
                         {
@@ -137,10 +152,17 @@ namespace ImageRecognition
         }
         private async void DeleteItems(object sender, RoutedEventArgs e)
         {
-            HttpClient client = new HttpClient();
-            await client.DeleteAsync($"https://localhost:44374/image/delete");
-            imagesBox.Items.Clear();
-            DeleteItemsButton.IsEnabled = false;
+            try
+            {
+                HttpClient client = new HttpClient();
+                await client.DeleteAsync($"https://localhost:44374/image/delete");
+                imagesBox.Items.Clear();
+                DeleteItemsButton.IsEnabled = false;
+            }
+            catch (HttpRequestException)
+            {
+                System.Windows.MessageBox.Show("Service is unavailable");
+            }
         }
     }
 }

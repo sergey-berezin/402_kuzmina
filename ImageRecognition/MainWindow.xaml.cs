@@ -7,8 +7,11 @@ using System;
 using System.Threading.Tasks;
 using System.Threading;
 using Models;
-using System.Collections.Concurrent;
-using System.Drawing.Imaging;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace ImageRecognition
 {
@@ -24,6 +27,61 @@ namespace ImageRecognition
             InitializeComponent();
             StartButton.IsEnabled = false;
             CancelButton.IsEnabled = false;
+            DeleteItemsButton.IsEnabled = false;
+        }
+        private async void UpdateListBox(object sender, RoutedEventArgs e)
+        {
+            imagesBox.Items.Clear();
+
+            try
+            {
+                HttpClient client = new HttpClient();
+                var response = await client.GetAsync($"https://localhost:44374/image/info");
+                if (!response.IsSuccessStatusCode)
+                    System.Windows.MessageBox.Show($"ERROR from server:\n{response.ReasonPhrase}");
+                else
+                {
+                    string json = await response.Content.ReadAsStringAsync();
+                    List<RecognizedImage> recognizedImages = JsonConvert.DeserializeObject<List<RecognizedImage>>(json);
+                    foreach (var r in recognizedImages)
+                    {
+                        AddImage(imagesBox, r);
+                    }
+                }
+                if (imagesBox.Items.Count > 0)
+                    DeleteItemsButton.IsEnabled = true;
+            }
+            catch (HttpRequestException)
+            {
+                System.Windows.MessageBox.Show("Service is unavailable");
+            }
+        }
+        private void AddImage(System.Windows.Controls.ListBox listBox, RecognizedImage recognized)
+        {
+            using (var ms = new MemoryStream(recognized.Image))
+            {
+                var bitmapImage = new BitmapImage();
+                bitmapImage.BeginInit();
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.StreamSource = ms;
+                bitmapImage.EndInit();
+                using (Graphics g = Graphics.FromImage(new Bitmap(ms)))
+                {
+                    foreach (var obj in recognized.Objects)
+                    {
+                        double width = obj.X2 - obj.X1;
+                        double height = obj.Y2 - obj.Y1;
+                        g.DrawRectangle(Pens.Red, Convert.ToInt32(obj.X1), Convert.ToInt32(obj.Y1), Convert.ToInt32(width), Convert.ToInt32(height));
+                        g.DrawString(obj.Class, new Font("Arial", 16), Brushes.Blue, new PointF(obj.X1, obj.Y1));
+                    }
+                }
+                System.Windows.Controls.Image myImage = new System.Windows.Controls.Image
+                {
+                    Source = bitmapImage,
+                    Width = 400
+                };
+                imagesBox.Items.Add(myImage);
+            }
         }
         private void ChoosingFolder(object sender, RoutedEventArgs e)
         {
@@ -37,78 +95,74 @@ namespace ImageRecognition
         }
         private async void BeginRecognizing(object sender, RoutedEventArgs e)
         {
-            imagesBox.Items.Clear();
-
+            DeleteItemsButton.IsEnabled = false;
             CTS = new CancellationTokenSource();
-            RecognitionModel model = new RecognitionModel(SelectedPath, CTS);
-            ConcurrentQueue<RecognitionResponse> responseQueue = new ConcurrentQueue<RecognitionResponse>();
-
-            Task t1 = Task.Factory.StartNew(() =>
-            {
-                try
-                {
-                    model.Recognize(responseQueue);
-                }
-                catch (TaskCanceledException)
-                {
-                    System.Windows.MessageBox.Show("Recognition was cancelled.");
-                }
-            });
+            RecognitionOne model = new RecognitionOne();
 
             CancelButton.IsEnabled = true;
-            StartButton.IsEnabled = false;
 
-            Task t2 = Task.Factory.StartNew(() =>
+            await Task.Factory.StartNew(() =>
             {
-                while (t1.Status == TaskStatus.Running)
-                {
-                    while (responseQueue.TryDequeue(out var res) && res != null)
+                var tasks = new List<Task>();
+                foreach (string imagePath in Directory.GetFiles(SelectedPath))
+                    tasks.Add(Task.Factory.StartNew(async () =>
                     {
-                        Bitmap bitmap = res.Image;
-                        using (Graphics g = Graphics.FromImage(bitmap))
+                        if (CTS.Token.IsCancellationRequested) return;
+                        try
                         {
-                            foreach (var obj in res.Corners)
+                            HttpClient client = new HttpClient();
+                            var bitmap = new Bitmap(Image.FromFile(imagePath));
+                            ImageConverter converter = new ImageConverter();
+                            var bytes = (byte[])converter.ConvertTo(bitmap, typeof(byte[]));
+                            var data = new StringContent(JsonConvert.SerializeObject(bytes), Encoding.Default, "application/json");
+
+                            var response = await client.PostAsync($"https://localhost:44374/image/recognize", data);
+                            if (!response.IsSuccessStatusCode)
+                                System.Windows.MessageBox.Show($"ERROR from server:\n{response.ReasonPhrase}");
+                            else
                             {
-                                double width = obj.Key[2] - obj.Key[0];
-                                double height = obj.Key[3] - obj.Key[1];
-                                g.DrawRectangle(Pens.Red, Convert.ToInt32(obj.Key[0]), Convert.ToInt32(obj.Key[1]), Convert.ToInt32(width), Convert.ToInt32(height));
-                                g.DrawString(obj.Value, new Font("Arial", 16), Brushes.Blue, new PointF(obj.Key[0], obj.Key[1]));
+                                string json = await response.Content.ReadAsStringAsync();
+                                RecognitionResponse res = JsonConvert.DeserializeObject<RecognitionResponse>(json);
                             }
                         }
-                        
-                        this.Dispatcher.BeginInvoke(new Action(() =>
+                        catch (HttpRequestException)
                         {
-                            System.Windows.Controls.Image myImage = new System.Windows.Controls.Image
-                            {
-                                Source = ToBitmapImage(bitmap),
-                                Width = 400
-                            };
-                            imagesBox.Items.Add(myImage);
-                        }));
-                    }
+                            System.Windows.MessageBox.Show("Service is unavailable");
+                        }
+
+                    }, CTS.Token));
+                try
+                {
+                    Task.WaitAll(tasks.ToArray());
+                }
+                catch (AggregateException e)
+                {
+                    if (e.InnerExceptions.All(ex => ex.GetType() == typeof(TaskCanceledException)))
+                        if (e.InnerExceptions.All(ex => (ex as TaskCanceledException).CancellationToken == CTS.Token))
+                            System.Windows.MessageBox.Show("Recognition was cancelled.");
                 }
             });
-            await Task.WhenAll(t1, t2);
+            
+            StartButton.IsEnabled = false;
             CancelButton.IsEnabled = false;
-        }
-        public static BitmapImage ToBitmapImage(Bitmap bitmap)
-        {
-            using (var memory = new MemoryStream())
-            {
-                bitmap.Save(memory, ImageFormat.Png);
-                memory.Position = 0;
-                var bitmapImage = new BitmapImage();
-                bitmapImage.BeginInit();
-                bitmapImage.StreamSource = memory;
-                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                bitmapImage.EndInit();
-                bitmapImage.Freeze();
-                return bitmapImage;
-            }
         }
         private void CancelRecognition(object sender, RoutedEventArgs e)
         {
             CTS.Cancel();
+        }
+        private async void DeleteItems(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                HttpClient client = new HttpClient();
+                await client.DeleteAsync($"https://localhost:44374/image/delete");
+                imagesBox.Items.Clear();
+                DeleteItemsButton.IsEnabled = false;
+            }
+            catch (HttpRequestException)
+            {
+                System.Windows.MessageBox.Show("Service is unavailable");
+            }
         }
     }
 }
